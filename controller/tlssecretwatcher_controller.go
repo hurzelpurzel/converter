@@ -95,10 +95,10 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		},
 	}
 
-    op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
-		
-			// update the Deployment pod template
-		
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+
+		// update the Deployment pod template
+
 		return nil
 	})
 
@@ -108,11 +108,9 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	} else {
 		logger.Info("ConfigMap successfully reconciled", "operation", op)
 		logger.Info("ConfigMap mit CA-Zertifikaten erzeugt", "name", cm.Name)
-	    return ctrl.Result{}, nil
+		return ctrl.Result{}, nil
 	}
 
-
-	
 }
 
 func stringJoin(strs []string, sep string) string {
