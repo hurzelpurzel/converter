@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "pottmeier.de/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -17,7 +19,15 @@ type TLSSecretWatcherReconciler struct {
 }
 
 func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Read Custom Resource
+	var watcher v1.TLSSecretWatcher
+	if err := r.Get(ctx, req.NamespacedName, &watcher); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	logger := log.FromContext(ctx)
+
+	logger.Info("Reconcilation triggered")
 
 	var secret corev1.Secret
 	if err := r.Get(ctx, req.NamespacedName, &secret); err != nil {
@@ -35,11 +45,12 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if _, ok := secret.Annotations["de.pottmeier.converter/createca"]; !ok {
 		return ctrl.Result{}, nil
 	}
+	logger.Info("Found secret " + secret.Name)
 
 	// CA extrahieren aus tls.crt
 	crtData := secret.Data["tls.crt"]
 	if crtData == nil {
-		logger.Info("tls.crt fehlt im Secret")
+		logger.Info("tls.crt missing in Secret")
 		return ctrl.Result{}, nil
 	}
 
@@ -55,7 +66,8 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err != nil {
 			continue
 		}
-		if cert.IsCA {
+
+		if cert.IsCA || !watcher.Spec.CheckCA {
 			caCerts = append(caCerts, string(pem.EncodeToMemory(block)))
 		}
 	}
