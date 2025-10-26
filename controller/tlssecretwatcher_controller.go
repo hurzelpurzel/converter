@@ -11,21 +11,28 @@ import (
 	v1 "pottmeier.de/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type TLSSecretWatcherReconciler struct {
 	client.Client
 }
 
+// +kubebuilder:rbac:groups=cert.pottmeier.de/v1,resources=tlssecretwatchers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=v1,resources=secrets,verbs=get;watch;list
+// +kubebuilder:rbac:groups=v1,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+
+
 func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Read Custom Resource
 	var watcher v1.TLSSecretWatcher
-	if err := r.Get(ctx, req.NamespacedName, &watcher); err != nil {
+	var target = client.ObjectKey{Namespace: req.Namespace, Name: "default"}
+
+	if err := r.Get(ctx, target, &watcher); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	logger := log.FromContext(ctx)
+	logger := logf.FromContext(ctx)
 
 	logger.Info("Reconciliation triggered")
 
@@ -109,6 +116,7 @@ func stringJoin(strs []string, sep string) string {
 }
 
 func (r *TLSSecretWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Setup the controller to watch for Secret resources
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Secret{}).
 		Complete(r)

@@ -3,6 +3,6 @@
 apiVersion: cert.pottmeier.de/v1
 kind: TLSSecretWatcher
 metadata:
-  name: activate
+  name: default
 spec:
   checkca: false
