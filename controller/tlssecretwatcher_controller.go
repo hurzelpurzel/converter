@@ -18,7 +18,7 @@ type TLSSecretWatcherReconciler struct {
 	client.Client
 }
 
-// +kubebuilder:rbac:groups=cert.pottmeier.de/v1,resources=tlssecretwatchers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert.pottmeier.de/v1,resources=tlssecretwatchers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=v1,resources=secrets,verbs=get;watch;list
 // +kubebuilder:rbac:groups=v1,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
