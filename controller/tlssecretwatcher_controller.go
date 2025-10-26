@@ -11,6 +11,7 @@ import (
 	v1 "pottmeier.de/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -21,7 +22,6 @@ type TLSSecretWatcherReconciler struct {
 // +kubebuilder:rbac:groups=cert.pottmeier.de/v1,resources=tlssecretwatchers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=v1,resources=secrets,verbs=get;watch;list
 // +kubebuilder:rbac:groups=v1,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-
 
 func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Read Custom Resource
@@ -95,13 +95,28 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		},
 	}
 
-	err := r.Create(ctx, cm)
-	if err != nil && !errors.IsAlreadyExists(err) {
+op, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, cm, func() error {
+		
+		if cm.ObjectMeta.CreationTimestamp.IsZero() {
+			
+		}
+
+		// update the Deployment pod template
+		
+		return nil
+	})
+
+	if err != nil {
+		logger.Error(err, "ConfigMap reconcile failed")
 		return ctrl.Result{}, err
+	} else {
+		logger.Info("ConfigMap successfully reconciled", "operation", op)
+		logger.Info("ConfigMap mit CA-Zertifikaten erzeugt", "name", cm.Name)
+	    return ctrl.Result{}, nil
 	}
 
-	logger.Info("ConfigMap mit CA-Zertifikaten erzeugt", "name", cm.Name)
-	return ctrl.Result{}, nil
+
+	
 }
 
 func stringJoin(strs []string, sep string) string {
