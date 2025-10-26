@@ -30,8 +30,8 @@ type TLSSecretWatcherSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	//+default=true
-	//+optional
+	// +default=true
+	// +optional
 	CheckCA bool `json:"checkca,omitempty"`
 }
 

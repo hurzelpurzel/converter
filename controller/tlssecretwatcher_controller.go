@@ -27,7 +27,7 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	logger := log.FromContext(ctx)
 
-	logger.Info("Reconcilation triggered")
+	logger.Info("Reconciliation triggered")
 
 	var secret corev1.Secret
 	if err := r.Get(ctx, req.NamespacedName, &secret); err != nil {
@@ -88,7 +88,7 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		},
 	}
 
-	err := r.Client.Create(ctx, cm)
+	err := r.Create(ctx, cm)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return ctrl.Result{}, err
 	}
