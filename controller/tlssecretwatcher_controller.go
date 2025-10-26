@@ -95,13 +95,9 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		},
 	}
 
-op, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, cm, func() error {
+    op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
 		
-		if cm.ObjectMeta.CreationTimestamp.IsZero() {
-			
-		}
-
-		// update the Deployment pod template
+			// update the Deployment pod template
 		
 		return nil
 	})
