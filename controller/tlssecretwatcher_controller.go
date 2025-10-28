@@ -61,6 +61,30 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	caCerts := extractCerts(crtData, watcher)
+
+	if len(caCerts) == 0 {
+		logger.Info("Keine CA-Zertifikate gefunden")
+		return ctrl.Result{}, nil
+	}
+
+	// ConfigMap erzeugen
+	cm := cmBuilder(req, caCerts)
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error { return nil })
+
+	if err != nil {
+		logger.Error(err, "ConfigMap reconcile failed")
+		return ctrl.Result{}, err
+	} else {
+		logger.Info("ConfigMap successfully reconciled", "operation", op)
+		logger.Info("ConfigMap mit CA-Zertifikaten erzeugt", "name", cm.Name)
+		return ctrl.Result{}, nil
+	}
+
+}
+
+func extractCerts(crtData []byte, watcher v1.TLSSecretWatcher) []string {
 	var caCerts []string
 	rest := crtData
 	for {
@@ -78,13 +102,10 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			caCerts = append(caCerts, string(pem.EncodeToMemory(block)))
 		}
 	}
+	return caCerts
+}
 
-	if len(caCerts) == 0 {
-		logger.Info("Keine CA-Zertifikate gefunden")
-		return ctrl.Result{}, nil
-	}
-
-	// ConfigMap erzeugen
+func cmBuilder(req ctrl.Request, caCerts []string) *corev1.ConfigMap {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name + "-ca",
@@ -94,23 +115,7 @@ func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			"ca.crt": stringJoin(caCerts, "\n"),
 		},
 	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
-
-		// update the Deployment pod template
-
-		return nil
-	})
-
-	if err != nil {
-		logger.Error(err, "ConfigMap reconcile failed")
-		return ctrl.Result{}, err
-	} else {
-		logger.Info("ConfigMap successfully reconciled", "operation", op)
-		logger.Info("ConfigMap mit CA-Zertifikaten erzeugt", "name", cm.Name)
-		return ctrl.Result{}, nil
-	}
-
+	return cm
 }
 
 func stringJoin(strs []string, sep string) string {

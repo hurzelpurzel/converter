@@ -7,6 +7,18 @@ rules:
 - apiGroups:
   - cert.pottmeier.de
   resources:
+  - tlssecretwatchers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cert.pottmeier.de
+  resources:
   - tlssecretwatchers/finalizers
   verbs:
   - update
@@ -19,17 +31,12 @@ rules:
   - patch
   - update
 - apiGroups:
-  - cert.pottmeier.de
   - cert.pottmeier.de/v1
   resources:
   - tlssecretwatchers
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - v1
