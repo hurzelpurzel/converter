@@ -1,63 +1,142 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controller
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	v1 "pottmeier.de/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	certv1 "pottmeier.de/api/v1"
 )
 
-// TLSSecretWatcherReconciler reconciles a TLSSecretWatcher object
 type TLSSecretWatcherReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=cert.pottmeier.de,resources=tlssecretwatchers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cert.pottmeier.de,resources=tlssecretwatchers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=cert.pottmeier.de,resources=tlssecretwatchers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=cert.pottmeier.de/v1,resources=tlssecretwatchers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=v1,resources=secrets,verbs=get;watch;list
+// +kubebuilder:rbac:groups=v1,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the TLSSecretWatcher object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
 func (r *TLSSecretWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	// Read Custom Resource
+	var watcher v1.TLSSecretWatcher
+	var target = client.ObjectKey{Namespace: req.Namespace, Name: "default"}
 
-	// TODO(user): your logic here
+	if err := r.Get(ctx, target, &watcher); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
 
-	return ctrl.Result{}, nil
+	logger := logf.FromContext(ctx)
+
+	// logger.Info("Reconciliation triggered")
+
+	var secret corev1.Secret
+	if err := r.Get(ctx, req.NamespacedName, &secret); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Nur TLS Secrets mit Annotation "de.pottmeier.converter/createca"
+	if secret.Type != corev1.SecretTypeTLS {
+		return ctrl.Result{}, nil
+	}
+
+	if _, ok := secret.Annotations["de.pottmeier.converter/createca"]; !ok {
+		return ctrl.Result{}, nil
+	}
+	logger.Info("Found secret " + secret.Name)
+
+	// CA extrahieren aus tls.crt
+	crtData := secret.Data["tls.crt"]
+	if crtData == nil {
+		logger.Info("tls.crt missing in Secret")
+		return ctrl.Result{}, nil
+	}
+
+	caCerts := extractCerts(crtData, watcher)
+
+	if len(caCerts) == 0 {
+		logger.Info("No CA-Certs found")
+		return ctrl.Result{}, nil
+	}
+
+	// ConfigMap erzeugen
+	cm := cmBuilder(req, caCerts)
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error { return nil })
+
+	if err != nil {
+		logger.Error(err, "ConfigMap reconcile failed")
+		return ctrl.Result{}, err
+	} else {
+		logger.Info("ConfigMap successfully reconciled", "operation", op)
+		logger.Info("ConfigMap with CA-Certs created", "name", cm.Name)
+		return ctrl.Result{}, nil
+	}
+
 }
 
-// SetupWithManager sets up the controller with the Manager.
+func extractCerts(crtData []byte, watcher v1.TLSSecretWatcher) []string {
+	var caCerts []string
+	rest := crtData
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			continue
+		}
+
+		if cert.IsCA || !watcher.Spec.CheckCA {
+			caCerts = append(caCerts, string(pem.EncodeToMemory(block)))
+		}
+	}
+	return caCerts
+}
+
+func cmBuilder(req ctrl.Request, caCerts []string) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.Name + "-ca",
+			Namespace: req.Namespace,
+		},
+		Data: map[string]string{
+			"ca.crt": stringJoin(caCerts, "\n"),
+		},
+	}
+	return cm
+}
+
+func stringJoin(strs []string, sep string) string {
+	result := ""
+	for i, s := range strs {
+		if i > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
+}
+
 func (r *TLSSecretWatcherReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Setup the controller to watch for Secret resources
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&certv1.TLSSecretWatcher{}).
-		Named("tlssecretwatcher").
+		For(&corev1.Secret{}).
 		Complete(r)
 }

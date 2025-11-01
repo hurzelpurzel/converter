@@ -2,9 +2,23 @@
 A simple Tool that helps in conversion tasks on Kubernetes
 
 ## Description
+
+To get this work create a CRD as follow with the name "defaul" in the target namespace.
+<pre>
+---
+apiVersion: cert.pottmeier.de/v1
+kind: TLSSecretWatcher
+metadata:
+  name: default
+spec:
+  checkca: false
+</pre>
+
 Currently follwing conversions are supported
 
-1. Extract ca Config Map from TLS Secrets it annotated with "de.pottmeier.converter/createca"
+1. Extract ca Config Map from TLS Secrets if it is annotated with "de.pottmeier.converter/createca"
+
+
 
 ## Getting Started
 
